@@ -1,0 +1,92 @@
+name: inno_chatbot
+
+networks:
+  inno_chatbot:
+    driver: bridge
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    env_file:
+      - .env
+    volumes:
+      - ${PWD}/ollama:/root/.ollama
+    container_name: ollama
+    pull_policy: always
+    tty: true
+    restart: always
+    networks:
+      - inno_chatbot
+    #       ipv4_address: 192.168.55.10
+    ports:
+      - ${OLLAMA_PORT}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: ["gpu"]
+  postgres:
+    image: ankane/pgvector
+    container_name: pgvector
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    env_file:
+      - .env
+    volumes:
+      - ./database/postgres/:${PGDATA}
+    networks:
+      - inno_chatbot
+    ports:
+      - ${POSTGRES_PORT}
+    command: "-c max_connections=200 -p ${POSTGRES_PORT}"
+    
+  core:
+    image: innodiskorg/rag:beta
+    build: ./docker
+    container_name: rag_v1
+    volumes:
+      - ${PWD}:/workspace/
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file:
+      - .env
+    networks:
+      - inno_chatbot
+    ports:
+      - ${UVICORN_PORT}:${UVICORN_PORT}
+    depends_on:
+      - postgres
+      - ollama
+    stdin_open: true
+    tty: true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    command: uvicorn app:app --host ${UVICORN_HOST} --port ${UVICORN_PORT} --reload
+    ipc: host
+    runtime: nvidia
+  streamlit:
+    image: streamlit-webui
+    build: 
+      context: ./webui
+      dockerfile: docker/Dockerfile
+    container_name: streamlit-webui
+    volumes:
+      - ${PWD}/webui/src/chatta_app:/opt/chatta_app
+    restart: always
+    networks:
+      - inno_chatbot
+    ports:
+      - 8501:8501
+    depends_on:
+      - core
+    environment:
+      - CORE_PORT=8001
+      - CORE_HOST=rag_v1    

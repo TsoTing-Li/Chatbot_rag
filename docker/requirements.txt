@@ -1,0 +1,23 @@
+#haystack
+haystack-ai==2.3.0
+
+#data process
+datasets>=2.20.0
+markdown-it-py==3.0.0
+mdit_plain>=1.0.1
+pypdf==4.3.0
+sentencepiece==0.2.0
+
+#vectordb
+pgvector-haystack==0.5.1
+faiss-gpu==1.7.2
+
+#web service
+fastapi==0.105.0
+websockets==12.0
+httpx==0.27.0
+uvicorn==0.28.0
+
+#other
+python-multipart==0.0.9
+colorlog==6.8.2 
