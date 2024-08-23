@@ -39,7 +39,7 @@ class BartModel(TopicsClassification):
         """
         super().__init__(model_name)
         self.model_name = model_name
-        self.url = f"http://{host}:{str(port)}/"
+        self.url = f"http://{host}:{str(port)}"
 
     def _load_model(self) -> None:
         """
@@ -53,7 +53,7 @@ class BartModel(TopicsClassification):
         """
 
         with httpx.Client() as client:
-            response = client.get(url=self.url + "model")
+            response = client.get(url=self.url + "/model")
 
         if response.status_code != 200 or response.json()["is_loaded"] is not True:
             raise RuntimeError
