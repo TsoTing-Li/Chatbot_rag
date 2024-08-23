@@ -112,12 +112,7 @@ class Operator:
     def search(
         self,
         query_embedding: List[float],
-        filters: dict = {
-            "operator": "AND",
-            "conditions": [
-                {"field": "meta.privacy", "operator": "!=", "value": "1"},
-            ],
-        },
+        filters: dict = None,
     ) -> List[float]:
         """
         Retrieve documents from the vector database based on query embeddings.
@@ -130,6 +125,13 @@ class Operator:
         Returns:
             List[float]: List of retrieved results.
         """
+        if not filters:
+            filters = {
+                "operator": "AND",
+                "conditions": [
+                    {"field": "meta.privacy", "operator": "!=", "value": "1"}
+                ],
+            }
         retriever_result = self.retriever.run(
             query_embedding=query_embedding, filters=filters
         )
