@@ -3,6 +3,10 @@ name: inno_chatbot
 networks:
   inno_chatbot:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.55.0/24
+          gateway: 192.168.55.1
 
 services:
   ollama:
@@ -16,8 +20,8 @@ services:
     tty: true
     restart: always
     networks:
-      - inno_chatbot
-    #       ipv4_address: 192.168.55.10
+      inno_chatbot:
+        ipv4_address: ${OLLAMA_HOST}
     ports:
       - ${OLLAMA_PORT}
     deploy:
@@ -25,22 +29,41 @@ services:
         reservations:
           devices:
             - driver: nvidia
+              capabilities: ["gpu"]
+  bart:
+    image: innodiskorg/ivit-chatbot:model-server-beta
+    build:
+      context: ./bart_server
+      dockerfile: docker/Dockerfile
+    container_name: bart_server
+    restart: always
+    volumes:
+      - ${PWD}/hf_models:/workspace/hf_models
+    networks:
+      inno_chatbot:
+        ipv4_address: ${BART_HOST}
+    ports:
+      - ${BART_PORT}
+    shm_size: '8g'
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
               count: 1
               capabilities: ["gpu"]
+    command: uvicorn app_bart:app --host 0.0.0.0 --port ${BART_PORT} --workers ${BART_WORKERS}
   postgres:
     image: ankane/pgvector
     container_name: pgvector
-    environment:
-      POSTGRES_HOST: ${POSTGRES_HOST}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+    restart: always
     env_file:
       - .env
     volumes:
       - ./database/postgres/:${PGDATA}
     networks:
-      - inno_chatbot
+      inno_chatbot:
+        ipv4_address: ${POSTGRES_HOST}
     ports:
       - ${POSTGRES_PORT}
     command: "-c max_connections=200 -p ${POSTGRES_PORT}"
@@ -49,19 +72,20 @@ services:
     image: innodiskorg/rag:beta
     build: ./docker
     container_name: rag_v1
+    restart: always
     volumes:
       - ${PWD}:/workspace/
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     env_file:
       - .env
     networks:
-      - inno_chatbot
+      inno_chatbot:
+        ipv4_address: ${CORE_HOST}
     ports:
-      - ${UVICORN_PORT}:${UVICORN_PORT}
+      - ${CORE_PORT}
     depends_on:
-      - postgres
       - ollama
+      - bart
+      - postgres
     stdin_open: true
     tty: true
     deploy:
@@ -69,7 +93,7 @@ services:
         reservations:
           devices:
             - capabilities: [gpu]
-    command: uvicorn app:app --host ${UVICORN_HOST} --port ${UVICORN_PORT} --reload
+    command: uvicorn app:app --host 0.0.0.0 --port ${CORE_PORT} --reload
     ipc: host
     runtime: nvidia
   streamlit:
@@ -78,15 +102,12 @@ services:
       context: ./webui
       dockerfile: docker/Dockerfile
     container_name: streamlit-webui
-    volumes:
-      - ${PWD}/webui/src/chatta_app:/opt/chatta_app
     restart: always
+    env_file:
+      - .env
     networks:
       - inno_chatbot
     ports:
-      - 8501:8501
+      - ${STREAMLIT_PORT}:${STREAMLIT_PORT}
     depends_on:
       - core
-    environment:
-      - CORE_PORT=8001
-      - CORE_HOST=rag_v1    
