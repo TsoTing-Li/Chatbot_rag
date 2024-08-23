@@ -35,7 +35,6 @@ class Agent:
         img_emb_model: ImageEmbedding,
         topics_classifier_service: TopicsClassification,
         topics: list = None,
-        host: str = "localhost",
     ) -> None:
         """
         Initialize the Agent with various models and services.
@@ -58,13 +57,15 @@ class Agent:
         self.gentxt_service = GenText(model=gen_text_model)
         self.memory_service = MemoryService(model=gen_text_model, topics=topics)
         self.retriever_service = RetrieverService(
-            text_emb_model=text_emb_model, img_emb_model=img_emb_model
+            text_emb_model=text_emb_model,
+            img_emb_model=img_emb_model,
         )
         self.topics_classifier_service = TopicsClassifier(
-            model=topics_classifier_service, topics=topics
+            model=topics_classifier_service,
+            topics=topics,
+            url=topics_classifier_service.url,
         )
         self.prompt_engineer = PromptEngineerService()
-        self.host = host
 
     def chat(
         self,
@@ -86,23 +87,19 @@ class Agent:
             str: The generated response from the agent.
         """
         if prompt and file:
-            topics = self.topics_classifier_service.run(sentence=prompt, host=self.host)
+            topics = self.topics_classifier_service.run(sentence=prompt)
             # get conversation
             conversation_history = self.memory_service.get_chat_history(topics=topics)
             instruction = self.memory_service.get_instruction()
 
             # get image description
-            image_description = self.retriever_service.search(data=file, host=self.host)
-            topics = self.topics_classifier_service.run(
-                sentence=image_description, host=self.host
-            )
+            image_description = self.retriever_service.search(data=file)
+            topics = self.topics_classifier_service.run(sentence=image_description)
             self.memory_service.remember(
                 topics=topics, user_prompt="What is it?", bot_answer=image_description
             )
 
-            retriever = self.retriever_service.search(
-                data=image_description, host=self.host
-            )
+            retriever = self.retriever_service.search(data=image_description)
 
             user_prompt = self.prompt_engineer.generate(
                 history=conversation_history,
@@ -120,15 +117,13 @@ class Agent:
 
         elif file:
             prompt = "What is it?"
-            response = self.retriever_service.search(data=file, host=self.host)
-            topics = self.topics_classifier_service.run(
-                sentence=response, host=self.host
-            )
+            response = self.retriever_service.search(data=file)
+            topics = self.topics_classifier_service.run(sentence=response)
 
         else:
             log.info("Start chat!")
             log.info(f"User prompt: '{prompt}'.")
-            topics = self.topics_classifier_service.run(sentence=prompt, host=self.host)
+            topics = self.topics_classifier_service.run(sentence=prompt)
             log.info(f"Topics: '{topics}'.")
             conversation_history = self.memory_service.get_chat_history(topics=topics)
             log.info(f"Conversation history: '{conversation_history}'.")

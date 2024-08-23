@@ -20,7 +20,7 @@ class TopicsClassifier(HandlerPattern):
             Classify the sentence into topics and return the top-k topics.
     """
 
-    def __init__(self, model: TopicsClassification, topics: list) -> None:
+    def __init__(self, model: TopicsClassification, topics: list, url: str) -> None:
         """
         Initialize the TopicsClassifier with a model and a list of topics.
 
@@ -35,6 +35,7 @@ class TopicsClassifier(HandlerPattern):
 
         self.model = self._check(model=model)
         self.topics = topics
+        self.url = url
 
     def _check(self, model) -> TopicsClassification:
         """
@@ -55,12 +56,9 @@ class TopicsClassifier(HandlerPattern):
             f"TopicsClassifier must create by model which type is 'TopicsClassification'! But Input type is '{type(model)}' , More info: model name is '{model.model_name}'."
         )
 
-    def run(
-        self, sentence: str, top_k: int = 3, host: str = "localhost", port: int = 8887
-    ) -> list:
-        url = f"http://{host}:{str(port)}/topic"
+    def run(self, sentence: str, top_k: int = 3) -> list:
         data = {"topics": self.topics, "sentence": sentence, "top_k": top_k}
         with httpx.Client() as client:
-            response = client.post(url=url, json=data)
+            response = client.post(url=self.url + "/topic", json=data)
             result = response.json()
         return result["topics"]

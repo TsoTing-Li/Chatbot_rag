@@ -8,6 +8,7 @@ from fastapi.responses import StreamingResponse
 
 from core.models import BartModel, ClipModel, Llama31Model, MinillmModel
 from service.agent import Agent
+from tools.connect_handler import ConnectHandler
 from tools.logger import config_logger
 from tools.user_register import UserHandler
 
@@ -21,12 +22,12 @@ logger = config_logger(
 )
 
 # Instantiation
-SHARE_HOST = "host.docker.internal"
 user_handler = UserHandler()
-gen_text_model = Llama31Model(host="ollama")
-text_emb_model = MinillmModel(host="ollama")
-img_emb_model = ClipModel(host=SHARE_HOST)
-topics_classifier_model = BartModel(host=SHARE_HOST)
+connect_handler = ConnectHandler()
+gen_text_model = Llama31Model(host=connect_handler.OLLAMA_HOST)
+text_emb_model = MinillmModel(host=connect_handler.OLLAMA_HOST)
+img_emb_model = ClipModel()
+topics_classifier_model = BartModel(host=connect_handler.BART_HOST)
 
 # Extension map
 CONTENT_TYPE_MAP = {"image/jpeg": ".jpg", "image/png": ".png"}
@@ -43,10 +44,10 @@ async def lifespan(app: FastAPI):
     logger.info(
         f"Success init model to Embedding text. model name = '{text_emb_model.model_name}'"
     )
-    img_emb_model._load_model()
-    logger.info(
-        f"Success init model to Embedding image. model name = '{img_emb_model.model_name}'"
-    )
+    # img_emb_model._load_model()
+    # logger.info(
+    #     f"Success init model to Embedding image. model name = '{img_emb_model.model_name}'"
+    # )
     topics_classifier_model._load_model()
     logger.info(
         f"Success init model to Do topics classifer. model name = '{topics_classifier_model.model_name}'"
@@ -73,13 +74,10 @@ agent = Agent(
     img_emb_model=img_emb_model,
     topics_classifier_service=topics_classifier_model,
     topics=topics,
-    host=SHARE_HOST,
 )
 logger.info("Success init Agent")
 
 app = FastAPI(lifespan=lifespan)
-# app.mount("/static", StaticFiles(directory="static", html=True), name="static")
-# logger.info("Success init webui, Start service!!!")
 
 
 @app.post("/chat/")
