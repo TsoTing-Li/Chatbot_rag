@@ -30,11 +30,9 @@ services:
           devices:
             - driver: nvidia
               capabilities: ["gpu"]
+
   bart:
     image: innodiskorg/ivit-chatbot:model-server-beta
-    build:
-      context: ./bart_server
-      dockerfile: docker/Dockerfile
     container_name: bart_server
     restart: always
     volumes:
@@ -53,6 +51,30 @@ services:
               count: 1
               capabilities: ["gpu"]
     command: uvicorn app_bart:app --host 0.0.0.0 --port ${BART_PORT} --workers ${BART_WORKERS}
+
+  doc_embed:
+    image: innodiskorg/ivit-chatbot:doc-emb-server-beta
+    container_name: doc_embed_server
+    restart: always
+    env_file:
+      - .env
+    volumes:
+      - ${PWD}/hf_models:/workspace/hf_models
+      - ${PWD}/upload_pdf:/workspace/upload_pdf
+    networks:
+      inno_chatbot:
+        ipv4_address: ${DOC_EMBED_HOST}
+    ports:
+      - ${DOC_EMBED_PORT}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: ["gpu"]
+    command: uvicorn app:app --host 0.0.0.0 --port ${DOC_EMBED_PORT} --workers ${DOC_EMBED_WORKERS}
+
   postgres:
     image: ankane/pgvector
     container_name: pgvector
@@ -69,7 +91,7 @@ services:
     command: "-c max_connections=200 -p ${POSTGRES_PORT}"
     
   core:
-    image: innodiskorg/rag:beta
+    image: innodiskorg/rag:beta-v0.1
     build: ./docker
     container_name: rag_v1
     restart: always
@@ -81,11 +103,12 @@ services:
       inno_chatbot:
         ipv4_address: ${CORE_HOST}
     ports:
-      - ${CORE_PORT}
+      - ${CORE_PORT}:${CORE_PORT}
     depends_on:
       - ollama
       - bart
       - postgres
+      - doc_embed
     stdin_open: true
     tty: true
     deploy:
@@ -96,6 +119,7 @@ services:
     command: uvicorn app:app --host 0.0.0.0 --port ${CORE_PORT} --reload
     ipc: host
     runtime: nvidia
+
   streamlit:
     image: streamlit-webui
     build: 
