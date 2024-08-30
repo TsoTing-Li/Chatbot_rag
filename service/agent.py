@@ -32,7 +32,6 @@ class Agent:
         self,
         gen_text_model: Text2Text,
         text_emb_model: TextEmbedding,
-        img_emb_model: ImageEmbedding,
         topics_classifier_service: TopicsClassification,
         topics: list = None,
     ) -> None:
@@ -58,7 +57,6 @@ class Agent:
         self.memory_service = MemoryService(model=gen_text_model, topics=topics)
         self.retriever_service = RetrieverService(
             text_emb_model=text_emb_model,
-            img_emb_model=img_emb_model,
         )
         self.topics_classifier_service = TopicsClassifier(
             model=topics_classifier_service,
@@ -71,7 +69,6 @@ class Agent:
         self,
         log: config_logger,
         prompt: str,
-        file: Optional[dict] = None,
         friendly: str = None,
     ) -> Generator[str]:
         """
@@ -80,47 +77,10 @@ class Agent:
         Args:
             log (config_logger): logger.
             prompt (str): The chat prompt from the user.
-            file (Optional[Image.Image], optional): An optional image input. Defaults to None.
             friendly (str): Friendly say hello at first time.
-
-        Returns:
-            str: The generated response from the agent.
         """
-        if prompt and file:
-            topics = self.topics_classifier_service.run(sentence=prompt)
-            # get conversation
-            conversation_history = self.memory_service.get_chat_history(topics=topics)
-            instruction = self.memory_service.get_instruction()
 
-            # get image description
-            image_description = self.retriever_service.search(data=file)
-            topics = self.topics_classifier_service.run(sentence=image_description)
-            self.memory_service.remember(
-                topics=topics, user_prompt="What is it?", bot_answer=image_description
-            )
-
-            retriever = self.retriever_service.search(data=image_description)
-
-            user_prompt = self.prompt_engineer.generate(
-                history=conversation_history,
-                retrieval=retriever,
-                prompt=prompt,
-                instruction=instruction,
-            )
-            system_prompt = self.prompt_engineer.instruction_content()
-            final_prompt = [
-                {"role": "system", "content": system_prompt[0]},
-                {"role": "system", "content": system_prompt[1]},
-                {"role": "system", "content": system_prompt[2]},
-                {"role": "user", "content": user_prompt},
-            ]
-
-        elif file:
-            prompt = "What is it?"
-            response = self.retriever_service.search(data=file)
-            topics = self.topics_classifier_service.run(sentence=response)
-
-        else:
+        try:
             log.info("Start chat!")
             log.info(f"User prompt: '{prompt}'.")
             topics = self.topics_classifier_service.run(sentence=prompt)
@@ -148,12 +108,25 @@ class Agent:
                 final_prompt.insert(0, {"role": "system", "content": friendly})
             log.info(f"Final prompt: '{str(final_prompt)}'.")
 
-        content = ""
-        for data in self.gentxt_service.run(data=final_prompt):
-            content += data
-            yield data
-
+        except BaseException:
+            log.error("Can not preprocess prompt")
+            raise RuntimeError
+        
+        try:
+            content = ""
+            for data in self.gentxt_service.run(data=final_prompt):
+                content += data
+                yield data
+        except BaseException:
+            log.error("Can not execute gentxt service")
+            raise RuntimeError
+        
         log.info(f"Response: '{content}'.")
-        self.memory_service.remember(
-            topics=topics, user_prompt=prompt, bot_answer=content
-        )
+
+        try:
+            self.memory_service.remember(
+                topics=topics, user_prompt=prompt, bot_answer=content
+            )
+        except BaseException:
+            log.error("Can not execute memory service")
+            raise RuntimeError

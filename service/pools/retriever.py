@@ -1,12 +1,7 @@
 from typing import Union
 
-from fastapi import UploadFile
-
-from core.handler.embedding.image_embedding import ImgEmb
 from core.handler.embedding.text_embedding import TextEmb
-from core.models.clip import ClipModel
 from core.models.minillm import MinillmModel
-from core.vec_db.faiss.main import Operator as Faiss
 from core.vec_db.pgvector.main import Operator as PgvecDB
 
 
@@ -29,7 +24,7 @@ class RetrieverService:
             Search for data in the appropriate database based on the input type (text or image).
     """
 
-    def __init__(self, text_emb_model: MinillmModel, img_emb_model: ClipModel) -> None:
+    def __init__(self, text_emb_model: MinillmModel) -> None:
         """
         Initialize the RetrieverService with text and image embedding models.
 
@@ -38,9 +33,7 @@ class RetrieverService:
             img_emb_model (ClipModel): The image embedding model.
         """
         self.text_emb_service = TextEmb(model=text_emb_model)
-        self.img_emb_service = ImgEmb(model=img_emb_model)
         self.pgvec_db = PgvecDB()
-        self.faiss = Faiss()
         # self.ranker = LostInTheMiddleRanker(top_k=1)
 
     def _search_from_pgvecdb(self, data: str) -> Union[str, None]:
@@ -62,22 +55,7 @@ class RetrieverService:
         else:
             return None
 
-    def _search_from_faiss(self, data: UploadFile, host: str = None) -> str:
-        """
-        Search for image data in the FAISS index.
-
-        Args:
-            data (Image.Image): The image data to be searched.
-
-        Returns:
-            str: The description of the top-ranked image.
-        """
-        data_vector = self.img_emb_service.run(data=data, host=host)
-        scores, retriever_result = self.faiss.search(query_embedding=data_vector)
-
-        return retriever_result["describe"][0]
-
-    def search(self, data: Union[str, UploadFile], host: str = None) -> str:
+    def search(self, data: str) -> str:
         """
         Search for data in the appropriate database based on the input type (text or image).
 
@@ -91,12 +69,7 @@ class RetrieverService:
             TypeError: If the input data type is not supported.
         """
 
-        if isinstance(data, str):
-            retriever_result = self._search_from_pgvecdb(data=data)
-
-        elif isinstance(data, UploadFile):
-            retriever_result = self._search_from_faiss(data=data, host=host)
-        else:
+        try:
+            return self._search_from_pgvecdb(data=data)
+        except BaseException:
             raise TypeError("Not support type!")
-
-        return retriever_result

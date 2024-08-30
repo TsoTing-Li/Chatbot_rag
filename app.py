@@ -3,10 +3,11 @@ from contextlib import asynccontextmanager
 from typing import Optional
 
 import uvicorn
-from fastapi import FastAPI, File, Form, Response, UploadFile, status
+from fastapi import FastAPI, Form, Response, status
 from fastapi.responses import StreamingResponse
 
-from core.models import BartModel, ClipModel, Llama31Model, MinillmModel
+import schema
+from core.models import BartModel, Llama31Model, MinillmModel
 from service.agent import Agent
 from tools.connect_handler import ConnectHandler
 from tools.logger import config_logger
@@ -26,11 +27,7 @@ user_handler = UserHandler()
 connect_handler = ConnectHandler()
 gen_text_model = Llama31Model(host=connect_handler.OLLAMA_HOST)
 text_emb_model = MinillmModel(host=connect_handler.OLLAMA_HOST)
-img_emb_model = ClipModel()
 topics_classifier_model = BartModel(host=connect_handler.BART_HOST)
-
-# Extension map
-CONTENT_TYPE_MAP = {"image/jpeg": ".jpg", "image/png": ".png"}
 
 
 @asynccontextmanager
@@ -44,14 +41,11 @@ async def lifespan(app: FastAPI):
     logger.info(
         f"Success init model to Embedding text. model name = '{text_emb_model.model_name}'"
     )
-    # img_emb_model._load_model()
-    # logger.info(
-    #     f"Success init model to Embedding image. model name = '{img_emb_model.model_name}'"
-    # )
     topics_classifier_model._load_model()
     logger.info(
-        f"Success init model to Do topics classifer. model name = '{topics_classifier_model.model_name}'"
+        f"Success init model to Topics classifier. model name = '{topics_classifier_model.model_name}'"
     )
+
     yield
 
     gen_text_model._release_model()
@@ -71,7 +65,6 @@ logger.info(f"Setting topics.'{topics}'")
 agent = Agent(
     gen_text_model=gen_text_model,
     text_emb_model=text_emb_model,
-    img_emb_model=img_emb_model,
     topics_classifier_service=topics_classifier_model,
     topics=topics,
 )
@@ -80,43 +73,41 @@ logger.info("Success init Agent")
 app = FastAPI(lifespan=lifespan)
 
 
-@app.post("/chat/")
+@app.post("/chat/", tags=["Chat"])
 def chat(
     username: str = Form(...),
     department: str = Form(...),
-    file: Optional[UploadFile] = File(None),
     prompt: Optional[str] = Form(None),
     friendly: Optional[str] = Form(None),
 ):
+    request_data = schema.PostChat(
+        username=username, department=department, prompt=prompt, friendly=friendly
+    )
     logger.info(f"user prompt : {prompt}")
-    try:
-        file_extension = CONTENT_TYPE_MAP[file.content_type]
-        file_name = file.filename if file.filename else f"unknown{file_extension}"
-        image = {"img": (file_name, file.file, file.content_type)}
-    except BaseException:
-        image = None
 
     return StreamingResponse(
         content=agent.chat(
-            log=user_handler.get(username=username, department=department),
-            prompt=prompt,
-            file=image,
-            friendly=friendly,
+            log=user_handler.get(
+                username=request_data.username, department=request_data.department
+            ),
+            prompt=request_data.prompt,
+            friendly=request_data.friendly,
         ),
         media_type="text/plain",
     )
 
 
-@app.post("/submit/")
-def submit(
-    username: str,
-    department: str,
-):
+@app.post("/submit/", tags=["Submit"])
+def submit(request_data: schema.PostSubmit):
     response = dict()
 
     try:
-        if user_handler.check(username=username, department=department):
-            response["message"] = f"User: '{username}' has been registered !"
+        if user_handler.check(
+            username=request_data.username, department=request_data.department
+        ):
+            response["message"] = (
+                f"User: '{request_data.username}' has been registered !"
+            )
             return Response(
                 content=json.dumps(response),
                 status_code=status.HTTP_200_OK,
@@ -131,7 +122,9 @@ def submit(
         )
 
     try:
-        user_handler.register(username=username, department=department)
+        user_handler.register(
+            username=request_data.username, department=request_data.department
+        )
     except BaseException as e:
         return Response(
             content=json.dumps({"messages": str(e)}),
@@ -140,7 +133,7 @@ def submit(
         )
 
     response["message"] = (
-        f"User '{username}' , Department : '{department}' successfully registered!"
+        f"User '{request_data.username}' , Department : '{request_data.department}' successfully registered!"
     )
     return Response(
         content=json.dumps(response),
@@ -149,13 +142,17 @@ def submit(
     )
 
 
-@app.post("/report/")
-def report(username: str, department: str, feedback: str):
+@app.post("/report/", tags=["Report"])
+def report(request_data: schema.PostReport):
     response = dict()
 
     try:
-        if not user_handler.check(username=username, department=department):
-            response["message"] = f"User '{username}' has not registered yet."
+        if not user_handler.check(
+            username=request_data.username, department=request_data.department
+        ):
+            response["message"] = (
+                f"User '{request_data.username}' has not registered yet."
+            )
             return Response(
                 content=json.dumps(response),
                 status_code=status.HTTP_200_OK,
@@ -165,12 +162,14 @@ def report(username: str, department: str, feedback: str):
         return Response(
             content=json.dumps({"messages": str(e)}),
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            media_type="applicatio/json",
+            media_type="application/json",
         )
 
     try:
-        log = user_handler.get(username=username, department=department)
-        log.info(f"User feedback : '{feedback}'")
+        log = user_handler.get(
+            username=request_data.username, department=request_data.department
+        )
+        log.info(f"User feedback : '{request_data.feedback}'")
     except BaseException as e:
         return Response(
             content=json.dumps({"messages": str(e)}),
@@ -179,7 +178,7 @@ def report(username: str, department: str, feedback: str):
         )
 
     response["message"] = (
-        f"User '{username}' , Department : '{department}' successfully send feedback!"
+        f"User '{request_data.username}' , Department : '{request_data.department}' successfully send feedback!"
     )
     return Response(
         content=json.dumps(response),
