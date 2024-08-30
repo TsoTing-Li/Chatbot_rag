@@ -1,7 +1,6 @@
 import os
 from typing import List
 
-from haystack.components.writers import DocumentWriter
 from haystack_integrations.components.retrievers.pgvector import (
     PgvectorEmbeddingRetriever,
 )
@@ -33,7 +32,6 @@ class Operator:
 
     Attributes:
         document_store (PgvectorDocumentStore): The document store for managing vector embeddings.
-        document_writer (DocumentWriter): The document writer for saving documents.
         retriever (PgvectorEmbeddingRetriever): The retriever for querying the vector database.
         vector_function (str): The function to use for vector similarity.
 
@@ -80,20 +78,9 @@ class Operator:
                      vector_function:{self.vector_function}
                      recreate_table:{recreate_table}
                      search_strategy:{search_strategy}""")
-        self.document_writer = DocumentWriter(self.document_store)
         self.set_retriever()
 
-    def save(self, document_vectors: list) -> None:
-        """
-        Save documents to the database.
-
-        Args:
-            document_vectors (list): List of documents to be saved, after document embedding.
-                More information: https://docs.haystack.deepset.ai/reference/document-writers-api#documentwriter
-        """
-        self.document_writer.run(documents=document_vectors)
-
-    def set_retriever(self, top_k: int = 2) -> None:
+    def set_retriever(self, top_k: int = 10) -> None:
         """
         Set the retriever for querying the vector database.
 
