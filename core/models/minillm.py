@@ -66,7 +66,6 @@ class MinillmModel(TextEmbedding):
         LOGGER.info(f"Success release {self.model_name}!")
 
     def run(self, data: str) -> list:
-        # LOGGER.info(f"Input: {prompt}")
         request_data = {"model": self.model_name, "input": data}
 
         with httpx.Client() as client:
