@@ -1,9 +1,21 @@
+import asyncio
 import json
 from contextlib import asynccontextmanager
-from typing import Optional
+from pathlib import Path
+from typing import List, Optional
 
 import uvicorn
-from fastapi import FastAPI, Form, Response, status
+from fastapi import (
+    BackgroundTasks,
+    FastAPI,
+    File,
+    Form,
+    Response,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 from fastapi.responses import StreamingResponse
 
 import schema
@@ -12,6 +24,7 @@ from service.agent import Agent
 from tools.connect_handler import ConnectHandler
 from tools.logger import config_logger
 from tools.user_register import UserHandler
+from utils import async_write_multi_files
 
 # init log
 logger = config_logger(
@@ -60,6 +73,15 @@ topics = [
     "Company Information",
 ]
 logger.info(f"Setting topics.'{topics}'")
+
+tasks_status = dict()
+logger.info("Success create 'tasks_status' dict.")
+
+CHUNK_SIZE = 1024 * 1024 * 5
+logger.info(f"Chunk size: {CHUNK_SIZE}")
+
+SAVE_PATH = "upload_pdf"
+logger.info(f"Save path: {SAVE_PATH}")
 
 # init Service
 agent = Agent(
@@ -185,6 +207,74 @@ def report(request_data: schema.PostReport):
         status_code=status.HTTP_200_OK,
         media_type="application/json",
     )
+
+
+@app.get("/status/", tags=["Status"])
+async def get_status(_id: str):
+    progress = tasks_status.get(_id)
+    if not progress:
+        progress = dict()
+    return Response(
+        content=json.dumps(progress),
+        status_code=status.HTTP_200_OK,
+        media_type="application/json",
+    )
+
+
+@app.post("/upload/", tags=["Upload"])
+async def upload(
+    background_tasks: BackgroundTasks,
+    files: List[UploadFile] = File(...),
+    username: str = Form(...),
+    department: str = Form(...),
+):
+    request_data = schema.PostUpload(
+        files=files, username=username, department=department
+    )
+
+    current_file_path = Path(__file__).resolve().parent
+    save_dir = (
+        current_file_path
+        / SAVE_PATH
+        / f"{request_data.department}_{request_data.username}"
+    )
+    save_dir.mkdir(parents=True, exist_ok=True)
+
+    background_tasks.add_task(
+        async_write_multi_files, request_data.files, save_dir, CHUNK_SIZE
+    )
+
+    return Response(
+        content=json.dumps({"task_id": f"{save_dir.name}"}),
+        status_code=status.HTTP_200_OK,
+        media_type="application/json",
+    )
+
+
+@app.websocket("/ws/{task_id}")
+async def websocket(websocket: WebSocket, task_id: str):
+    await websocket.accept()
+    previous_filename = None
+
+    try:
+        while True:
+            progress = tasks_status.get(task_id)
+            if progress is None:
+                break
+            if progress["filename"] != previous_filename:
+                try:
+                    await websocket.send_json(progress)
+                    previous_filename = progress["filename"]
+                except BaseException:
+                    break
+            if progress["task"] is True:
+                break
+
+            await asyncio.sleep(0.1)
+    except WebSocketDisconnect:
+        print(f"WebSocket connection closed for task: {task_id}")
+    finally:
+        await websocket.close()
 
 
 if __name__ == "__main__":
