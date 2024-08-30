@@ -72,4 +72,4 @@ class RetrieverService:
         try:
             return self._search_from_pgvecdb(data=data)
         except BaseException:
-            raise TypeError("Not support type!")
+            raise TypeError from "Not support type!"
