@@ -38,13 +38,13 @@ class PostSubmit(BaseModel):
 
     @model_validator(mode="after")
     def check(self: "PostSubmit") -> "PostSubmit":
-        if bool(re.search(r"[^a-zA-Z0-9_\-\s/\u4E00-\u9FFF]+"), self.username) is True:
+        if bool(re.search(r"[^a-zA-Z0-9_\-\s/\u4E00-\u9FFF]+", self.username)) is True:
             raise RequestValidationError(
                 {"messages": f"username: {self.username} contain invalid characters."}
             )
 
         if (
-            bool(re.search(r"[^a-zA-Z0-9_\-\s/\u4E00-\u9FFF]+"), self.department)
+            bool(re.search(r"[^a-zA-Z0-9_\-\s/\u4E00-\u9FFF]+", self.department))
             is True
         ):
             raise RequestValidationError(
@@ -62,13 +62,13 @@ class PostReport(BaseModel):
 
     @model_validator(mode="after")
     def check(self: "PostReport") -> "PostReport":
-        if bool(re.search(r"[^a-zA-Z0-9_\-\s/\u4E00-\u9FFF]+"), self.username) is True:
+        if bool(re.search(r"[^a-zA-Z0-9_\-\s/\u4E00-\u9FFF]+", self.username)) is True:
             raise RequestValidationError(
                 {"messages": f"username: {self.username} contain invalid characters."}
             )
 
         if (
-            bool(re.search(r"[^a-zA-Z0-9_\-\s/\u4E00-\u9FFF]+"), self.department)
+            bool(re.search(r"[^a-zA-Z0-9_\-\s/\u4E00-\u9FFF]+", self.department))
             is True
         ):
             raise RequestValidationError(
@@ -77,7 +77,7 @@ class PostReport(BaseModel):
                 }
             )
 
-        if bool(re.search(r"[^a-zA-Z0-9_\-\s/\u4E00-\u9FFF]+"), self.feedback) is True:
+        if bool(re.search(r"[^a-zA-Z0-9_\-\s/\u4E00-\u9FFF]+", self.feedback)) is True:
             raise RequestValidationError(
                 {"messages": f"feedback: {self.feedback} contain invalid characters."}
             )
