@@ -9,7 +9,7 @@ This Repository provides a Chatbot include RAG function and a simple frontend.
     ```bash
     python3 -m venv download_model
     source download_model/bin/activate
-    pip install --upgrade huggingface_hub dotenv-python
+    pip install --upgrade huggingface_hub python-dotenv
     ```
 
 * Set your Hugging Face token in the appropriate variable. [Get serverless api token](https://huggingface.co/docs/api-inference/index) 
